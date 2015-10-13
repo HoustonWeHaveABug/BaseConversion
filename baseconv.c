@@ -64,7 +64,7 @@ bigint_t *val, *tval;
 		errno = EINVAL;
 		return NULL;
 	}
-	for (i = 0; i < len && vals[str[i]-rdigs[0]] < base; i++);
+	for (i = 0; i < len && strchr(digs, str[i]); i++);
 	if (i < len) {
 		errno = EINVAL;
 		free(vals);
