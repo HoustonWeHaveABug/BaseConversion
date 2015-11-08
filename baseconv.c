@@ -5,39 +5,39 @@
 
 #define BASE_MIN 2
 #define BASE_MAX 94
-#define P_MAX (((size_t)-1 >> (sizeof(size_t) << 2))+1)
+#define P_MAX (((unsigned long)-1 >> (sizeof(unsigned long) << 2))+1)
 #define BUF_SIZE 256
 
 struct bigint_s {
-	size_t m;
-	size_t *p;
+	unsigned long m;
+	unsigned long *p;
 };
 typedef struct bigint_s bigint_t;
 
 struct bigint_divide_s {
 	bigint_t *q;
-	bigint_t *r;
+	unsigned long r;
 };
 typedef struct bigint_divide_s bigint_divide_t;
 
 #include "baseconv.h"
 bigint_t *str_to_bigint(const char *, const char *);
 char *bigint_to_str(const bigint_t *, const char *);
-size_t *check_digits(const char *, size_t);
-bigint_divide_t *bigint_int_divide(const bigint_t *, size_t);
-bigint_t *bigint_int_add(const bigint_t *, size_t);
+unsigned long *check_digits(const char *, unsigned long);
+bigint_divide_t *bigint_int_divide(const bigint_t *, unsigned long);
+bigint_t *bigint_int_add(const bigint_t *, unsigned long);
 bigint_t *bigints_add(const bigint_t *, const bigint_t *);
-bigint_t *bigint_int_multiply(const bigint_t *, size_t);
+bigint_t *bigint_int_multiply(const bigint_t *, unsigned long);
 bigint_t *bigints_subtract(const bigint_t *, const bigint_t *);
-void hilo_add(size_t, size_t *, size_t *);
-void hilo_subtract(size_t, size_t, size_t *, size_t *);
+void hilo_add(unsigned long, unsigned long *, unsigned long *);
+void hilo_subtract(unsigned long, unsigned long, unsigned long *, unsigned long *);
 bigint_t *bigint_copy(const bigint_t *);
 int bigint_reduce(bigint_t *);
-bigint_t *bigint_create(size_t);
+bigint_t *bigint_create(unsigned long);
 void bigint_destroy(bigint_t *);
-bigint_divide_t *bigint_divide_create(const bigint_t *);
+bigint_divide_t *bigint_divide_create(void);
 void bigint_divide_destroy(bigint_divide_t *);
-void reverse_str(char *, size_t);
+void reverse_str(char *, unsigned long);
 
 const char *rdigs = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
 
@@ -53,7 +53,7 @@ bigint_t *val = str_to_bigint(istr, idigs);
 }
 
 bigint_t *str_to_bigint(const char *str, const char *digs) {
-size_t len = strlen(str), base = strlen(digs), *vals, i;
+unsigned long len = strlen(str), base = strlen(digs), *vals, i;
 bigint_t *val, *tval;
 	if (!len || !base) {
 		errno = EINVAL;
@@ -97,7 +97,7 @@ bigint_t *val, *tval;
 }
 
 char *bigint_to_str(const bigint_t *val, const char *digs) {
-size_t base = strlen(digs), *vals, i;
+unsigned long base = strlen(digs), *vals, i;
 char *str, *tstr;
 bigint_t *cval, *tval;
 bigint_divide_t *tdiv;
@@ -138,7 +138,7 @@ bigint_divide_t *tdiv;
 			free(str);
 			return NULL;
 		}
-		str[i-1] = digs[tdiv->r->p[0]];
+		str[i-1] = digs[tdiv->r];
 		tval = cval;
 		cval = bigint_copy(tdiv->q);
 		bigint_divide_destroy(tdiv);
@@ -155,8 +155,8 @@ bigint_divide_t *tdiv;
 	return str;
 }
 
-size_t *check_digits(const char *digs, size_t base) {
-size_t *vals = malloc(sizeof(size_t)*BASE_MAX), i;
+unsigned long *check_digits(const char *digs, unsigned long base) {
+unsigned long *vals = malloc(sizeof(unsigned long)*BASE_MAX), i;
 	if (!vals) {
 		return NULL;
 	}
@@ -174,28 +174,36 @@ size_t *vals = malloc(sizeof(size_t)*BASE_MAX), i;
 	return vals;
 }
 
-bigint_divide_t *bigint_int_divide(const bigint_t *a, size_t b) {
-size_t i;
-bigint_t *h, *tmp;
-bigint_divide_t *d = bigint_divide_create(a);
+bigint_divide_t *bigint_int_divide(const bigint_t *a, unsigned long b) {
+unsigned long i;
+bigint_t *r, *h, *tmp;
+bigint_divide_t *d = bigint_divide_create();
 	if (!d) {
 		return NULL;
 	}
-	while (d->r->m > 1 || d->r->p[0] >= b) {
-		if (d->r->p[d->r->m-1] < b) {
-			h = bigint_create(d->r->m-1);
+	r = bigint_copy(a);
+	if (!r) {
+		bigint_divide_destroy(d);
+		return NULL;
+	}
+	while (r->m > 1 || r->p[0] >= b) {
+		if (r->p[r->m-1] < b) {
+			h = bigint_create(r->m-1);
 			if (!h) {
+				bigint_destroy(r);
 				bigint_divide_destroy(d);
 				return NULL;
 			}
-			h->p[h->m-1] = d->r->p[d->r->m-1]*P_MAX+d->r->p[d->r->m-2];
+			h->p[h->m-1] = r->p[r->m-1]*P_MAX+r->p[r->m-2];
 		}
 		else {
-			if (!(h = bigint_create(d->r->m))) {
+			h = bigint_create(r->m);
+			if (!h) {
+				bigint_destroy(r);
 				bigint_divide_destroy(d);
 				return NULL;
 			}
-			h->p[h->m-1] = d->r->p[d->r->m-1];
+			h->p[h->m-1] = r->p[r->m-1];
 		}
 		h->p[h->m-1] /= b;
 		for (i = 0; i < h->m-1; i++) {
@@ -206,6 +214,7 @@ bigint_divide_t *d = bigint_divide_create(a);
 		bigint_destroy(tmp);
 		if (!d->q) {
 			bigint_destroy(h);
+			bigint_destroy(r);
 			bigint_divide_destroy(d);
 			return NULL;
 		}
@@ -213,23 +222,26 @@ bigint_divide_t *d = bigint_divide_create(a);
 		h = bigint_int_multiply(h, b);
 		bigint_destroy(tmp);
 		if (!h) {
+			bigint_destroy(r);
 			bigint_divide_destroy(d);
 			return NULL;
 		}
-		tmp = d->r;
-		d->r = bigints_subtract(d->r, h);
+		tmp = r;
+		r = bigints_subtract(r, h);
 		bigint_destroy(tmp);
 		bigint_destroy(h);
-		if (!d->r) {
+		if (!r) {
 			bigint_divide_destroy(d);
 			return NULL;
 		}
 	}
+	d->r = r->p[0];
+	bigint_destroy(r);
 	return d;
 }
 
-bigint_t *bigint_int_add(const bigint_t *a, size_t b) {
-size_t i;
+bigint_t *bigint_int_add(const bigint_t *a, unsigned long b) {
+unsigned long i;
 bigint_t *r = bigint_create(a->m+1);
 	if (!r) {
 		return NULL;
@@ -242,7 +254,7 @@ bigint_t *r = bigint_create(a->m+1);
 }
 
 bigint_t *bigints_add(const bigint_t *a, const bigint_t *b) {
-size_t i;
+unsigned long i;
 const bigint_t *min, *max;
 bigint_t *r;
 	if (a->m < b->m) {
@@ -267,8 +279,8 @@ bigint_t *r;
 	return bigint_reduce(r) == EXIT_SUCCESS ? r:NULL;
 }
 
-bigint_t *bigint_int_multiply(const bigint_t *a, size_t b) {
-size_t i;
+bigint_t *bigint_int_multiply(const bigint_t *a, unsigned long b) {
+unsigned long i;
 bigint_t *r = bigint_create(a->m+1);
 	if (!r) {
 		return NULL;
@@ -281,7 +293,7 @@ bigint_t *r = bigint_create(a->m+1);
 }
 
 bigint_t *bigints_subtract(const bigint_t *a, const bigint_t *b) {
-size_t c, i;
+unsigned long c, i;
 bigint_t *r;
 	if (a->m < b->m || (a->m == b->m && a->p[a->m-1] < b->p[b->m-1])) {
 		errno = EINVAL;
@@ -301,7 +313,7 @@ bigint_t *r;
 	return bigint_reduce(r) == EXIT_SUCCESS ? r:NULL;
 }
 
-void hilo_add(size_t v, size_t *hi, size_t *lo) {
+void hilo_add(unsigned long v, unsigned long *hi, unsigned long *lo) {
 	if (v < P_MAX) {
 		*hi = 0;
 		*lo = v;
@@ -312,7 +324,7 @@ void hilo_add(size_t v, size_t *hi, size_t *lo) {
 	}
 }
 
-void hilo_subtract(size_t v1, size_t v2, size_t *hi, size_t *lo) {
+void hilo_subtract(unsigned long v1, unsigned long v2, unsigned long *hi, unsigned long *lo) {
 	if (v1 < v2) {
 		*hi = 1;
 		*lo = v1+P_MAX-v2;
@@ -324,7 +336,7 @@ void hilo_subtract(size_t v1, size_t v2, size_t *hi, size_t *lo) {
 }
 
 bigint_t *bigint_copy(const bigint_t *a) {
-size_t i;
+unsigned long i;
 bigint_t *r = bigint_create(a->m);
 	if (!r) {
 		return NULL;
@@ -336,11 +348,11 @@ bigint_t *r = bigint_create(a->m);
 }
 
 int bigint_reduce(bigint_t *r) {
-size_t i, *tmp;
+unsigned long i, *tmp;
 	for (i = r->m-1; i > 0 && !r->p[i]; i--);
 	if (i < r->m-1) {
 		r->m = i+1;
-		tmp = realloc(r->p, sizeof(size_t)*r->m);
+		tmp = realloc(r->p, sizeof(unsigned long)*r->m);
 		if (!tmp) {
 			bigint_destroy(r);
 			return EXIT_FAILURE;
@@ -350,7 +362,7 @@ size_t i, *tmp;
 	return EXIT_SUCCESS;
 }
 
-bigint_t *bigint_create(size_t m) {
+bigint_t *bigint_create(unsigned long m) {
 bigint_t *r;
 	if (m < 1) {
 		errno = EINVAL;
@@ -361,7 +373,7 @@ bigint_t *r;
 		return NULL;
 	}
 	r->m = m;
-	r->p = malloc(sizeof(size_t)*m);
+	r->p = malloc(sizeof(unsigned long)*m);
 	if (!r->p) {
 		free(r);
 		return NULL;
@@ -374,7 +386,7 @@ void bigint_destroy(bigint_t *r) {
 	free(r);
 }
 
-bigint_divide_t *bigint_divide_create(const bigint_t *a) {
+bigint_divide_t *bigint_divide_create(void) {
 bigint_divide_t *d = malloc(sizeof(bigint_divide_t));
 	if (!d) {
 		return NULL;
@@ -385,23 +397,16 @@ bigint_divide_t *d = malloc(sizeof(bigint_divide_t));
 		return NULL;
 	}
 	d->q->p[0] = 0;
-	d->r = bigint_copy(a);
-	if (!d->r) {
-		bigint_destroy(d->q);
-		free(d);
-		return NULL;
-	}
 	return d;
 }
 
 void bigint_divide_destroy(bigint_divide_t *d) {
-	bigint_destroy(d->r);
 	bigint_destroy(d->q);
 	free(d);
 }
 
-void reverse_str(char *str, size_t len) {
-size_t i, j;
+void reverse_str(char *str, unsigned long len) {
+unsigned long i, j;
 char tchr;
 	for (i = 0, j = len-1; i < j; i++, j--) {
 		tchr = str[i];
