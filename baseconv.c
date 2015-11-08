@@ -382,7 +382,9 @@ bigint_t *r;
 }
 
 void bigint_destroy(bigint_t *r) {
-	if (r->p) free(r->p);
+	if (r->p) {
+		free(r->p);
+	}
 	free(r);
 }
 
